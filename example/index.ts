@@ -1,5 +1,11 @@
-// Edit this file to trigger the TSServer commands.
+/** @odoo-module */
 
-const anExampleVariable = "Hello World"
-console.log(anExampleVariable)
-a
+import * as classic from "base.classic";
+import * as aliased from "base.aliased";
+export * as relative from "./addons/base/relative";
+import * as john from "john";
+
+function what() {
+  aliased.foo;
+  classic.foo;
+}

@@ -26,8 +26,22 @@ function decorate<T, K extends keyof T>(
   });
 }
 
+const odooPragma = "@odoo-module";
 const odooModules = /@odoo-module\s+alias=(?<module>.+)\b/g;
 const odooDefine = /odoo\s*\.define\s*\(\s*['"](?<classic>.+)['"]/;
+const odooNewImportPattern = /^@(.+?)\/(.+)$/;
+
+function replaceLast(src: string, needle: string, replace: string) {
+  const idx = src.lastIndexOf(needle);
+  if (idx != -1) {
+    src = src.slice(0, idx) + replace + src.slice(idx + needle.length);
+  }
+  return src;
+}
+
+function search(src: string, needle: string) {
+  return src.indexOf(needle) != -1;
+}
 
 function init(modules: {
   typescript: typeof import("typescript/lib/tsserverlibrary");
@@ -36,19 +50,20 @@ function init(modules: {
 
   function create(info: ts.server.PluginCreateInfo) {
     const pwd = info.project.getCurrentDirectory();
+    const addonsDir = info.config.addonsDir || `${pwd}/addons`;
     let cache: Map<string, { loc: string; classic: boolean }> = new Map();
 
-    function _info(msg: string) {
-      info.project.projectService.logger.info("[odoo] " + msg);
+    function log(msg: string, type = ts.server.Msg.Info) {
+      info.project.projectService.logger.msg("[odoo] " + msg, type);
     }
 
     function updateCache(file: string) {
-      _info(`File update: ${file}`);
+      log(`File update: ${file}`);
       const contents = ts.sys.readFile(file);
       if (!contents) {
         for (const [key, removed] of cache.entries()) {
           if (file == removed.loc) {
-            _info(`File removal: ${file}`);
+            log(`File removal: ${file}`);
             cache.delete(key);
             info.project.refreshDiagnostics();
             return;
@@ -60,7 +75,7 @@ function init(modules: {
           const groups = match.groups!;
           const alias = groups.module || groups.classic;
           const classic = !!groups.classic;
-          _info(`Found alias ${alias} to ${file} (classic=${classic})`);
+          log(`Found alias ${alias} to ${file} (classic=${classic})`);
           cache.set(alias, { loc: file, classic });
           info.project.refreshDiagnostics();
         }
@@ -71,28 +86,14 @@ function init(modules: {
     for (const file of walker) {
       updateCache(file);
     }
-    _info(`Init done: ${JSON.stringify(cache)}`);
 
-    // TODO: Current behavior is that as long as "path" is not open,
-    // it will be possible to deceive the typechecker into using this
-    // virtual file. When it is opened by VSCode, however,
-    // it bypasses this function and therefore emits errors.
-    decorate(ts.sys, "readFile", (readFile) => {
+    decorate(info.serverHost, "readFile", (readFile) => {
       return (path, encoding) => {
-        _info(`Reading file ${path}`);
-        const file = readFile(path, encoding);
+        let file = readFile(path, encoding);
         if (file) {
           for (const { loc, classic } of cache.values()) {
             if (path == loc && classic) {
-              const idx = file.lastIndexOf("return");
-              if (idx != -1) {
-                const replacement =
-                  file.substring(0, idx) +
-                  "module.exports=" +
-                  file.substring(idx + 6 /* 'return'.length */);
-                _info(`Replacement: ${replacement}`);
-                return replacement;
-              }
+              return replaceLast(file, "return", "module.exports=");
             }
           }
         }
@@ -105,6 +106,23 @@ function init(modules: {
         if (cache.has(name)) {
           return ts.classicNameResolver(
             cache.get(name)!.loc,
+            file,
+            opts,
+            host,
+            cache_,
+            redirected
+          );
+        }
+        if (
+          name.startsWith("@") &&
+          search(host.readFile(file) || "", odooPragma)
+        ) {
+          const redirect = name.replace(
+            odooNewImportPattern,
+            `${addonsDir}/$1/static/src/$2`
+          );
+          return ts.classicNameResolver(
+            redirect,
             file,
             opts,
             host,
@@ -125,7 +143,7 @@ function init(modules: {
       fopts
     ) => {
       const comps = getCompletionsAtPosition(file, pos, opts, fopts);
-      if (comps) {
+      if (comps && opts?.includeCompletionsForImportStatements) {
         for (const name of cache.keys()) {
           comps.entries.push({
             name,

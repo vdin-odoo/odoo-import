@@ -27,8 +27,9 @@ function decorate<T, K extends keyof T>(
 }
 
 const odooPragma = "@odoo-module";
+const odooClassicDefine = 'odoo.define'
 const odooModules = /@odoo-module\s+alias=(?<module>.+)\b/g;
-const odooDefine = /odoo\s*\.define\s*\(\s*['"](?<classic>.+)['"]/;
+const odooDefine = /odoo\s*\.define\s*\(\s*['"](?<classic>.+)['"]/g
 const odooNewImportPattern = /^@(.+?)\/(.+)$/;
 
 function replaceLast(src: string, needle: string, replace: string) {
@@ -39,8 +40,11 @@ function replaceLast(src: string, needle: string, replace: string) {
   return src;
 }
 
-function search(src: string, needle: string) {
-  return src.indexOf(needle) != -1;
+function search(src: string, ...needle: string[]) {
+  for (const n of needle) {
+    if (src.indexOf(n) != -1)  return true
+  }
+  return false
 }
 
 function init(modules: {
@@ -58,7 +62,6 @@ function init(modules: {
     }
 
     function updateCache(file: string) {
-      log(`File update: ${file}`);
       const contents = ts.sys.readFile(file);
       if (!contents) {
         for (const [key, removed] of cache.entries()) {
@@ -71,13 +74,27 @@ function init(modules: {
         }
       } else {
         let match;
-        if ((match = odooModules.exec(contents) || odooDefine.exec(contents))) {
-          const groups = match.groups!;
-          const alias = groups.module || groups.classic;
-          const classic = !!groups.classic;
-          log(`Found alias ${alias} to ${file} (classic=${classic})`);
-          cache.set(alias, { loc: file, classic });
-          info.project.refreshDiagnostics();
+        if (match = odooModules.exec(contents)) {
+          const alias = match.groups!.modern
+          log(`Found alias ${alias} to ${file} (classic=false)`)
+          cache.set(alias, { loc: file, classic: false })
+          info.project.refreshDiagnostics()
+          return
+        }
+
+        if (match = contents.matchAll(odooDefine)) {
+          let first = true
+          for (const m of match) {
+            const alias = m.groups!.classic
+            log(`Found alias ${alias} to ${file} (classic=true)`)
+            cache.set(alias, { loc: file, classic: true })
+            if (!first) {
+              log('Merged classic declarations are not fully supported yet')
+            }
+            first = false
+          }
+          info.project.refreshDiagnostics()
+          return
         }
       }
     }
@@ -103,6 +120,7 @@ function init(modules: {
 
     decorate(ts, "resolveModuleName", (resolve) => {
       return (name, file, opts, host, cache_, redirected, mode) => {
+        log(`redirected=${JSON.stringify(redirected)}`)
         if (cache.has(name)) {
           return ts.classicNameResolver(
             cache.get(name)!.loc,
@@ -115,7 +133,7 @@ function init(modules: {
         }
         if (
           name.startsWith("@") &&
-          search(host.readFile(file) || "", odooPragma)
+          search(host.readFile(file) || "", odooPragma, odooClassicDefine)
         ) {
           const redirect = name.replace(
             odooNewImportPattern,

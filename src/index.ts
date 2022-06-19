@@ -1,52 +1,169 @@
-function init(modules: { typescript: typeof import("typescript/lib/tsserverlibrary") }) {
-    const ts = modules.typescript;
-  
-    function create(info: ts.server.PluginCreateInfo) {
-      // Get a list of things to remove from the completion list from the config object.
-      // If nothing was specified, we'll just remove 'caller'
-      const whatToRemove: string[] = info.config.remove || ["caller"];
+import { Walker } from "./walker";
 
-      // Diagnostic logging
-      info.project.projectService.logger.info(
-        "I'm getting set up now! Check the log for this message."
-      );
-  
-      // Set up decorator object
-      const proxy: ts.LanguageService = Object.create(null);
-      for (let k of Object.keys(info.languageService) as Array<keyof ts.LanguageService>) {
-        const x = info.languageService[k]!;
-        // @ts-expect-error - JS runtime trickery which is tricky to type tersely
-        proxy[k] = (...args: Array<{}>) => x.apply(info.languageService, args);
+/**
+ * Since this file needs to be injected before any other code runs,
+ * abuse setters to apply these monkeypatches once their targets exist.
+ */
+function decorate<T, K extends keyof T>(
+  obj: T,
+  prop: K,
+  func: (prop: T[K]) => T[K]
+) {
+  var existingValue: T[K] = func(obj[prop]);
+
+  Object.defineProperty(obj, prop, {
+    enumerable: true,
+    configurable: true,
+    get() {
+      return existingValue;
+    },
+    set(newValue) {
+      if (!existingValue) {
+        existingValue = func(newValue);
       }
-  
-      // Remove specified entries from completion list
-      proxy.getCompletionsAtPosition = (fileName, position, options) => {
-        // This is just to let you hook into something to
-        // see the debugger working
-        debugger        
+      return existingValue;
+    },
+  });
+}
 
-        const prior = info.languageService.getCompletionsAtPosition(fileName, position, options);
-        if (!prior) return
+const odooPragma = "@odoo-module";
+const odooModules = /@odoo-module\s+alias=(?<module>.+)\b/g;
+const odooDefine = /odoo\s*\.define\s*\(\s*['"](?<classic>.+)['"]/;
+const odooNewImportPattern = /^@(.+?)\/(.+)$/;
 
-        const oldLength = prior.entries.length;
-        prior.entries = prior.entries.filter(e => whatToRemove.indexOf(e.name) < 0);
-  
-        // Sample logging for diagnostic purposes
-        if (oldLength !== prior.entries.length) {
-          const entriesRemoved = oldLength - prior.entries.length;
-          info.project.projectService.logger.info(
-            `Removed ${entriesRemoved} entries from the completion list`
+function replaceLast(src: string, needle: string, replace: string) {
+  const idx = src.lastIndexOf(needle);
+  if (idx != -1) {
+    src = src.slice(0, idx) + replace + src.slice(idx + needle.length);
+  }
+  return src;
+}
+
+function search(src: string, needle: string) {
+  return src.indexOf(needle) != -1;
+}
+
+function init(modules: {
+  typescript: typeof import("typescript/lib/tsserverlibrary");
+}) {
+  const ts = modules.typescript;
+
+  function create(info: ts.server.PluginCreateInfo) {
+    const pwd = info.project.getCurrentDirectory();
+    const addonsDir = info.config.addonsDir || `${pwd}/addons`;
+    let cache: Map<string, { loc: string; classic: boolean }> = new Map();
+
+    function log(msg: string, type = ts.server.Msg.Info) {
+      info.project.projectService.logger.msg("[odoo] " + msg, type);
+    }
+
+    function updateCache(file: string) {
+      log(`File update: ${file}`);
+      const contents = ts.sys.readFile(file);
+      if (!contents) {
+        for (const [key, removed] of cache.entries()) {
+          if (file == removed.loc) {
+            log(`File removal: ${file}`);
+            cache.delete(key);
+            info.project.refreshDiagnostics();
+            return;
+          }
+        }
+      } else {
+        let match;
+        if ((match = odooModules.exec(contents) || odooDefine.exec(contents))) {
+          const groups = match.groups!;
+          const alias = groups.module || groups.classic;
+          const classic = !!groups.classic;
+          log(`Found alias ${alias} to ${file} (classic=${classic})`);
+          cache.set(alias, { loc: file, classic });
+          info.project.refreshDiagnostics();
+        }
+      }
+    }
+
+    const walker = new Walker(ts, pwd);
+    for (const file of walker) {
+      updateCache(file);
+    }
+
+    decorate(info.serverHost, "readFile", (readFile) => {
+      return (path, encoding) => {
+        let file = readFile(path, encoding);
+        if (file) {
+          for (const { loc, classic } of cache.values()) {
+            if (path == loc && classic) {
+              return replaceLast(file, "return", "module.exports=");
+            }
+          }
+        }
+        return file;
+      };
+    });
+
+    decorate(ts, "resolveModuleName", (resolve) => {
+      return (name, file, opts, host, cache_, redirected, mode) => {
+        if (cache.has(name)) {
+          return ts.classicNameResolver(
+            cache.get(name)!.loc,
+            file,
+            opts,
+            host,
+            cache_,
+            redirected
           );
         }
-  
-        return prior;
+        if (
+          name.startsWith("@") &&
+          search(host.readFile(file) || "", odooPragma)
+        ) {
+          const redirect = name.replace(
+            odooNewImportPattern,
+            `${addonsDir}/$1/static/src/$2`
+          );
+          return ts.classicNameResolver(
+            redirect,
+            file,
+            opts,
+            host,
+            cache_,
+            redirected
+          );
+        }
+        return resolve(name, file, opts, host, cache_, redirected, mode);
       };
-  
-      return proxy;
-    }
-  
-    return { create };
+    });
+
+    const getCompletionsAtPosition =
+      info.languageService.getCompletionsAtPosition;
+    info.languageService.getCompletionsAtPosition = (
+      file,
+      pos,
+      opts,
+      fopts
+    ) => {
+      const comps = getCompletionsAtPosition(file, pos, opts, fopts);
+      if (comps && opts?.includeCompletionsForImportStatements) {
+        for (const name of cache.keys()) {
+          comps.entries.push({
+            name,
+            kind: ts.ScriptElementKind.externalModuleName,
+            sortText: name,
+            isImportStatementCompletion: true,
+          });
+        }
+      }
+      return comps;
+    };
+
+    ts.sys.watchDirectory!(pwd, updateCache, true, {
+      // needed so that ts.sys.readFile doesn't return null for existent file
+      synchronousWatchDirectory: true,
+    });
+
+    return info.languageService;
   }
-  
-  export = init;
-  
+  return { create };
+}
+
+export = init;

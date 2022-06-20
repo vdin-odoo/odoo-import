@@ -117,7 +117,6 @@ function init(modules: {
 
     decorate(ts, "resolveModuleName", (resolve) => {
       return (name, file, opts, host, cache_, redirected, mode) => {
-        log(`redirected=${JSON.stringify(redirected)}`);
         if (cache.has(name)) {
           return ts.classicNameResolver(
             cache.get(name)!.loc,

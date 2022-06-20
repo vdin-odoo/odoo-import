@@ -3,6 +3,15 @@
     "version": "0.0.1",
     "license": "MIT",
     "main": "./out",
+    "engines": {
+        "node": ">= 14.0.0"
+    },
+    "author": {
+        "name": "Viet Dinh <vidi@odoo.com>" 
+    },
+    "scripts": {
+        "prepublish": "tsc"
+    },
     "dependencies": {
         "typescript": "^4.4.3"
     },

@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     // This matches the package name given in this package.json
-    "plugins": [{
-      "name": "tsserver-plugin"
-    }],
+    // "plugins": [{
+    //   "name": "tsserver-plugin"
+    // }],
 
     // Everything below is just the default for `tsc --init`
 

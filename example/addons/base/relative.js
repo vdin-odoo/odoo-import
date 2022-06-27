@@ -1,3 +1,3 @@
 /** @odoo-module */
 
-export {};
+export const test = 123

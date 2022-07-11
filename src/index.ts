@@ -56,10 +56,14 @@ function init(modules: {
 }) {
   const ts = modules.typescript;
   let config: Config;
-
-  const onConfigurationUpdated = (config_: Config) => config = config_;
+  let refresh: Function | undefined
+  function onConfigurationUpdated(config_: Config) {
+    config = config_
+    refresh?.()
+  }
 
   function create(info: ts.server.PluginCreateInfo) {
+    refresh = info.project.refreshDiagnostics.bind(info.project)
     const pwd = info.project.getCurrentDirectory();
     config = info.config;
     const addonsDir = () => config.addonDirectories ||= [`${pwd}/addons`];

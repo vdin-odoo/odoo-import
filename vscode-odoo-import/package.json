@@ -21,8 +21,21 @@
 		"typescriptServerPlugins": [
 			{
 				"name": "odoo-import"
+			},
+		],
+		"configuration": {
+			"title": "Odoo Import",
+			"properties": {
+				"odooImport.addonDirectories": {
+					"type": "array",
+					"default": ["./addons"],
+					"description": "Root directories to look for Odoo addons.",
+					"items": {
+						"type": "string"
+					}
+				}
 			}
-		]
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",

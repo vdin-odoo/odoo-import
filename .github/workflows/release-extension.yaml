@@ -18,6 +18,8 @@ jobs:
       - name: Verify bumped version
         if: github.event_name == 'release'
         run: test "v$(npm view odoo-import version)" = "{{ github.ref_name }}"
+      - name: Install dependencies
+        run: yarn
       - name: Prepublish
         run: yarn prepublish      
   testExtension:
@@ -44,7 +46,7 @@ jobs:
         id: packageExtension
         uses: HaaLeo/publish-vscode-extension@v1
         with:
-          pat: ''
+          pat: stub
           dryRun: true
           yarn: true
           packagePath: vscode-odoo-import

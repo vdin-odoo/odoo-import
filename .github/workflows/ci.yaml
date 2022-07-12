@@ -19,10 +19,7 @@ jobs:
         run: yarn
       - name: Verify bumped version
         if: github.event_name == 'release'
-        run: |
-          echo version=$(npm view odoo-import version)
-          echo ref_name="{{ github.ref_name }}"
-          test "v$(npm view odoo-import version)" = "{{ github.ref_name }}"
+        run: test "v$(npm view odoo-import version)" = "$GITHUB_REF_NAME"
       - name: Prepublish
         run: yarn prepublish      
   testExtension:
@@ -41,7 +38,7 @@ jobs:
       - name: Verify bumped version
         if: github.event_name == 'release'
         working-directory: vscode-odoo-import
-        run: test "v$(npm view vscode-odoo-import version)" = "{{ github.ref_name }}"
+        run: test "v$(npm view vscode-odoo-import version)" = "$GITHUB_REF_NAME"
       - name: Prepublish
         working-directory: vscode-odoo-import
         run: yarn vscode:prepublish

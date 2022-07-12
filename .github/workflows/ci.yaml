@@ -89,12 +89,20 @@ jobs:
       - name: Install dependencies
         working-directory: vscode-odoo-import
         run: yarn
-      - name: Publish to OpenVSX
-        id: publishVsx
+      - name: Package extension
+        id: package
         uses: HaaLeo/publish-vscode-extension@v1
         with:
-          pat: ${{ secrets.OPEN_VSX_TOKEN }}
+          pat: stub
           packagePath: vscode-odoo-import
+          dryRun: true
+          yarn: true
+      - name: Publish to OpenVSX
+        uses: HaaLeo/publish-vscode-extension@v1
+        continue-on-error: true
+        with:
+          pat: ${{ secrets.OPEN_VSX_TOKEN }}
+          extensionFile: ${{ steps.package.outputs.vsixPath }}
           yarn: true
       - name: Publish to Visual Studio Marketplace
         uses: HaaLeo/publish-vscode-extension@v1
@@ -102,11 +110,11 @@ jobs:
         with:
           pat: ${{ secrets.VS_MARKETPLACE_TOKEN }}
           registryUrl: https://marketplace.visualstudio.com
-          extensionFile: ${{ steps.publishVsx.outputs.vsixPath }}
+          extensionFile: ${{ steps.package.outputs.vsixPath }}
           yarn: true
       - name: Add file to release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
-          files: ${{ steps.publishVsx.outputs.vsixPath }}
+          files: ${{ steps.package.outputs.vsixPath }}
           

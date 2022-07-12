@@ -17,7 +17,6 @@ jobs:
           cache: yarn
       - name: Install dependencies
         run: yarn
-      - run: sudo apt install -y jq
       - name: Verify bumped version
         if: github.event_name == 'release'
         run: test "v$(jq -r '.version' package.json)" = "$GITHUB_REF_NAME"
@@ -36,7 +35,6 @@ jobs:
       - name: Install dependencies
         working-directory: vscode-odoo-import
         run: yarn
-      - run: sudo apt install -y jq
       - name: Verify bumped version
         if: github.event_name == 'release'
         working-directory: vscode-odoo-import
@@ -55,7 +53,6 @@ jobs:
   publishPlugin:
     name: Publish Plugin
     runs-on: ubuntu-latest
-    continue-on-error: true
     needs:
       - testPlugin
       - testExtension

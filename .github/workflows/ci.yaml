@@ -15,11 +15,11 @@ jobs:
         with:
           node-version: 16
           cache: yarn
+      - name: Install dependencies
+        run: yarn
       - name: Verify bumped version
         if: github.event_name == 'release'
         run: test "v$(npm view odoo-import version)" = "{{ github.ref_name }}"
-      - name: Install dependencies
-        run: yarn
       - name: Prepublish
         run: yarn prepublish      
   testExtension:
@@ -32,13 +32,13 @@ jobs:
         with:
           node-version: 16
           cache: yarn
+      - name: Install dependencies
+        working-directory: vscode-odoo-import
+        run: yarn
       - name: Verify bumped version
         if: github.event_name == 'release'
         working-directory: vscode-odoo-import
         run: test "v$(npm view vscode-odoo-import version)" = "{{ github.ref_name }}"
-      - name: Install dependencies
-        working-directory: vscode-odoo-import
-        run: yarn
       - name: Prepublish
         working-directory: vscode-odoo-import
         run: yarn vscode:prepublish

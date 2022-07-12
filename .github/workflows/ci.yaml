@@ -55,6 +55,7 @@ jobs:
   publishPlugin:
     name: Publish Plugin
     runs-on: ubuntu-latest
+    continue-on-error: true
     needs:
       - testPlugin
       - testExtension
@@ -80,10 +81,6 @@ jobs:
     if: github.event_name == 'release'
     steps:
       - uses: actions/checkout@v2
-      - name: Download artifacts
-        uses: actions/download-artifact@v2
-        with:
-          name: vscode-odoo-import
       - name: Setup Node.js
         uses: actions/setup-node@v2
         with:

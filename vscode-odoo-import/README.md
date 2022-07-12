@@ -16,5 +16,12 @@ Todo!
 Multiple classic modules in one file are not entirely supported right now (i.e. odoo.define('foo') modules)
 
 ## Release Notes
+
+### 0.1.0
+
+- Add `addonDirectories` configuration
+- Enable extension for JavaScript-only projects
+
 ### 0.0.1
+
 Initial release

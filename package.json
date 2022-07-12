@@ -1,13 +1,13 @@
 {
     "name": "odoo-import",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "license": "MIT",
     "main": "./out",
     "engines": {
         "node": ">= 14.0.0"
     },
     "author": {
-        "name": "Viet Dinh <vidi@odoo.com>" 
+        "name": "Viet Dinh <vidi@odoo.com>"
     },
     "scripts": {
         "prepublish": "tsc"

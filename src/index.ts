@@ -1,18 +1,15 @@
+import type ts from "typescript/lib/tsserverlibrary";
 import { Walker } from "./walker";
 
 interface Config {
-  addonDirectories?: string[]
+  addonDirectories?: string[];
 }
 
 /**
  * Since this file needs to be injected before any other code runs,
  * abuse setters to apply these monkeypatches once their targets exist.
  */
-function decorate<T, K extends keyof T>(
-  obj: T,
-  prop: K,
-  func: (prop: T[K]) => T[K]
-) {
+function decorate<T, K extends keyof T>(obj: T, prop: K, func: (prop: T[K]) => T[K]) {
   var existingValue: T[K] = func(obj[prop]);
 
   Object.defineProperty(obj, prop, {
@@ -50,30 +47,34 @@ function search(src: string, ...needle: string[]) {
   }
   return false;
 }
+interface CacheEntry {
+  loc: string;
+  classic: boolean;
+}
 
-function init(modules: {
-  typescript: typeof import("typescript/lib/tsserverlibrary");
-}) {
+function init(modules: { typescript: typeof import("typescript/lib/tsserverlibrary") }) {
   const ts = modules.typescript;
   let config: Config;
-  let refresh: Function | undefined
+  let refresh: Function | undefined;
+  let updateCache: (_: string) => void;
+  let cache = new Map<string, CacheEntry>();
+
   function onConfigurationUpdated(config_: Config) {
-    config = config_
-    refresh?.()
+    config = config_;
+    refresh?.();
   }
 
   function create(info: ts.server.PluginCreateInfo) {
-    refresh = info.project.refreshDiagnostics.bind(info.project)
+    refresh = info.project.refreshDiagnostics.bind(info.project);
     const pwd = info.project.getCurrentDirectory();
     config = info.config;
-    const addonsDir = () => config.addonDirectories ||= [`${pwd}/addons`];
-    let cache: Map<string, { loc: string; classic: boolean }> = new Map();
+    const addonsDir = () => (config.addonDirectories ||= [`${pwd}/addons`]);
 
     function log(msg: string, type = ts.server.Msg.Info) {
       info.project.projectService.logger.msg("[odoo] " + msg, type);
     }
 
-    function updateCache(file: string) {
+    updateCache = (file: string) => {
       const contents = ts.sys.readFile(file);
       if (!contents) {
         for (const [key, removed] of cache.entries()) {
@@ -104,14 +105,12 @@ function init(modules: {
           }
           first = false;
         }
-        if (!first) info.project.refreshDiagnostics()
+        if (!first) info.project.refreshDiagnostics();
       }
-    }
+    };
 
     const walker = new Walker(ts, pwd);
-    for (const file of walker) {
-      updateCache(file);
-    }
+    for (const file of walker) updateCache(file);
 
     decorate(info.serverHost, "readFile", (readFile) => {
       return (path, encoding) => {
@@ -130,43 +129,21 @@ function init(modules: {
     decorate(ts, "resolveModuleName", (resolve) => {
       return (name, file, opts, host, cache_, redirected, mode) => {
         if (cache.has(name)) {
-          return ts.classicNameResolver(
-            cache.get(name)!.loc,
-            file,
-            opts,
-            host,
-            cache_,
-            redirected
-          );
+          return ts.classicNameResolver(cache.get(name)!.loc, file, opts, host, cache_, redirected);
         }
-        if (
-          name.startsWith("@") &&
-          search(host.readFile(file) || "", odooPragma, odooClassicDefine)
-        ) {
-          const redirect = addonsDir()
-            .map(dir => name.replace(odooNewImportPattern, `${dir}/$1/static/src/$2`))
-            .find(path => ts.sys.fileExists(path)) || '';
-          return ts.classicNameResolver(
-            redirect,
-            file,
-            opts,
-            host,
-            cache_,
-            redirected
-          );
+        if (name.startsWith("@") && search(host.readFile(file) || "", odooPragma, odooClassicDefine)) {
+          const redirect =
+            addonsDir()
+              .map((dir) => name.replace(odooNewImportPattern, `${dir}/$1/static/src/$2`))
+              .find((path) => ts.sys.fileExists(path)) || "";
+          return ts.classicNameResolver(redirect, file, opts, host, cache_, redirected);
         }
         return resolve(name, file, opts, host, cache_, redirected, mode);
       };
     });
 
-    const getCompletionsAtPosition =
-      info.languageService.getCompletionsAtPosition;
-    info.languageService.getCompletionsAtPosition = (
-      file,
-      pos,
-      opts,
-      fopts
-    ) => {
+    const getCompletionsAtPosition = info.languageService.getCompletionsAtPosition;
+    info.languageService.getCompletionsAtPosition = (file, pos, opts, fopts) => {
       const comps = getCompletionsAtPosition(file, pos, opts, fopts);
       if (comps && opts?.includeCompletionsForImportStatements) {
         for (const name of cache.keys()) {

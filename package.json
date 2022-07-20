@@ -1,6 +1,6 @@
 {
     "name": "odoo-import",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "license": "MIT",
     "main": "./out",
     "engines": {
@@ -12,10 +12,8 @@
     "scripts": {
         "prepublish": "tsc"
     },
-    "dependencies": {
-        "typescript": "^4.4.3"
-    },
     "devDependencies": {
-        "@types/node": "^18.0.0"
+        "@types/node": "^18.0.0",
+        "typescript": "^4.4.3"
     }
 }

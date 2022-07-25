@@ -40,7 +40,7 @@
 		}
 	},
 	"scripts": {
-		"vscode:prepublish": "rm -r out && tsc -p ./tsconfig.prod.json",
+		"vscode:prepublish": "tsc -p ./tsconfig.prod.json",
 		"compile": "tsc -p ./",
 		"watch": "tsc -watch -p ./",
 		"pretest": "npm run compile && npm run lint",

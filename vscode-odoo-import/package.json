@@ -61,6 +61,6 @@
 		"typescript": "^4.7.2"
 	},
 	"dependencies": {
-		"odoo-import": "0.1.1"
+		"odoo-import": "file:.."
 	}
 }

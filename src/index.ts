@@ -55,24 +55,32 @@ interface CacheEntry {
 function init(modules: { typescript: typeof import("typescript/lib/tsserverlibrary") }) {
   const ts = modules.typescript;
   let config: Config;
-  let refresh: Function | undefined;
+  let refresh: Function;
+  let addonsDir: () => string[];
   let updateCache: (_: string) => void;
   let cache = new Map<string, CacheEntry>();
+  let log: Function;
 
-  function onConfigurationUpdated(config_: Config) {
-    config = config_;
-    refresh?.();
+  function onConfigurationChanged(config_: Config) {
+    config = { ...config, ...config_ };
+    if (config_.addonDirectories) {
+      cache.clear();
+      const walker = new Walker(ts, ...addonsDir());
+      for (const file of walker) updateCache(file);
+    }
+    refresh();
   }
 
   function create(info: ts.server.PluginCreateInfo) {
+    log = (msg: any, type = ts.server.Msg.Info) => {
+      if (typeof msg !== 'string') msg = JSON.stringify(msg);
+      info.project.projectService.logger.msg("[odoo] " + msg, type);
+    };
+
     refresh = info.project.refreshDiagnostics.bind(info.project);
     const pwd = info.project.getCurrentDirectory();
     config = info.config;
-    const addonsDir = () => (config.addonDirectories ||= [`${pwd}/addons`]);
-
-    function log(msg: string, type = ts.server.Msg.Info) {
-      info.project.projectService.logger.msg("[odoo] " + msg, type);
-    }
+    addonsDir = () => (config.addonDirectories ||= [`${pwd}/addons`]);
 
     updateCache = (file: string) => {
       const contents = ts.sys.readFile(file);
@@ -109,7 +117,7 @@ function init(modules: { typescript: typeof import("typescript/lib/tsserverlibra
       }
     };
 
-    const walker = new Walker(ts, pwd);
+    const walker = new Walker(ts, ...addonsDir());
     for (const file of walker) updateCache(file);
 
     decorate(info.serverHost, "readFile", (readFile) => {
@@ -165,7 +173,7 @@ function init(modules: { typescript: typeof import("typescript/lib/tsserverlibra
 
     return info.languageService;
   }
-  return { create, onConfigurationUpdated };
+  return { create, onConfigurationChanged };
 }
 
 export = init;

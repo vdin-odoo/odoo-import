@@ -2,3 +2,4 @@ example
 vscode-odoo-import
 src/
 *.tgz
+/.github

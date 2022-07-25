@@ -2,7 +2,7 @@
 	"name": "vscode-odoo-import",
 	"displayName": "vscode-odoo-import",
 	"description": "Adapt Odoo modules to TypeScript conventions",
-	"version": "0.1.0",
+	"version": "0.1.2",
 	"publisher": "Desdaemon",
 	"license": "MIT",
 	"repository": "https://github.com/vidi-odoo/odoo-import",
